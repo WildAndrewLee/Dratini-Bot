@@ -1,9 +1,9 @@
 const net = require('net');
 const eris = require('eris');
-const dratini = require('dratini');
-const Dratini = dratini.Dratini;
-const Command = dratini.Command;
-const Arguments = dratini.Arguments;
+const Dratini = require('dratini');
+const Command = Dratini.Command;
+const Arguments = Dratini.Arguments;
+const Or = Dratini.Or;
 
 const addresses = [
     '8.31.99.135:8484',
@@ -21,17 +21,18 @@ const addresses = [
 const to_notify = {};
 
 function alertMe(args, ctx){
-    this.createMessage(ctx.channel.id, "Okay. I'll notify you when MapleStory is online.");
+    this.createMessage(ctx.channel.id, "Okay. I'll tell you when MapleStory is online.");
     to_notify[ctx.author.id] = true;
 }
 
 function connect(ip, port){
     return new Promise((resolve, reject) => {
         let c = net.connect(port, ip, () => {
-            resolve();
+            reject(ip + ':' + port);
         });
 
-        c.on('error', reject);
+        c.on('error', resolve);
+        c.setTimeout(1000, resolve.bind(null, ip + ':' + port));
     });
 }
 
@@ -45,7 +46,10 @@ function checkOnline(){
         promises.push(connect(ip, port));
     }
 
-    Promise.all(promises).then(() => {
+    Promise.all(promises).then((addr) => {
+        console.log(`[${new Date()}] Failed to connect to ${err}.`);
+    }, (addr) => {
+        console.log(`[${new Date()}] Login server ${addr} is online.`);
         for(id in to_notify){
             client.getDMChannel(id).then((ch) => {
                 client.createMessage(ch.id, 'MapleStory is back online!');
@@ -58,19 +62,23 @@ function checkOnline(){
 }
 
 const Eris = require('eris');
-const client = new Eris('');
+const client = new Eris(process.env.discord_token);
 const bot = new Dratini();
-bot.init(client, '~');
+bot.init(client, 'dratini');
 
 bot.register(
     new Command(
         new Arguments(
             [
-                'notify',
-                'me'
+                new Or('verb', ['tell', 'whisper', 'pm', 'dm', 'message', 'msg']),
+                'me',
+                'when',
+                new Or('game', ['maplestory', 'ms', 'maple']),
+                'is',
+                new Or('status', ['up', 'online', 'back'])
             ]
         ), alertMe, {
-            desc: 'Subscribe to a notification when MapleStory is back online. You will be alerted when all login servers are available.'
+            desc: 'Subscribe to a notification when MapleStory is back online. You will be alerted when any login servers are available.'
         }
     )
 );
